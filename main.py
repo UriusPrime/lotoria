@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+
 from database import Base, engine
 from models import User, PlayerSave
 from schemas import RegisterRequest, LoginRequest, TokenResponse
@@ -9,13 +11,47 @@ from auth import (
 )
 from save_routes import router as save_router
 
+
+# ------------------------------------------------------------------
+# Database
+# ------------------------------------------------------------------
 Base.metadata.create_all(bind=engine)
 
+
+# ------------------------------------------------------------------
+# App
+# ------------------------------------------------------------------
 app = FastAPI(title="Game Backend")
 
+
+# ------------------------------------------------------------------
+# CORS (REQUIRED FOR UNITY / ANDROID)
+# DEV MODE: allow all
+# ------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # tighten later for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ------------------------------------------------------------------
+# Health check (VERY IMPORTANT for Render & debugging)
+# ------------------------------------------------------------------
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ------------------------------------------------------------------
+# Auth
+# ------------------------------------------------------------------
 @app.post("/auth/register", response_model=TokenResponse)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.username == data.username).first():
+    existing_user = db.query(User).filter(User.username == data.username).first()
+    if existing_user:
         raise HTTPException(status_code=400, detail="Username exists")
 
     user = User(
@@ -40,4 +76,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token}
 
 
-app.include_router(save_router)
+# ------------------------------------------------------------------
+# Save routes
+# ------------------------------------------------------------------
+app.include_router(save_router, prefix="/save")
