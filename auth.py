@@ -12,12 +12,12 @@ SECRET_KEY = "CHANGE_THIS_LATER"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
-# --- Password hashing ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# --- Password hashing (argon2 to avoid bcrypt 72-byte limit) ---
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# --- Database ---
-def get_db():
+# --- Database session ---
+def get_db() -> Session:
     db = SessionLocal()
     try:
         yield db
@@ -27,16 +27,18 @@ def get_db():
 # --- Hash & verify ---
 def hash_password(password: str) -> str:
     """
-    Hash a password using bcrypt, truncated to 72 bytes (bcrypt limit).
+    Hash a password using argon2.
+    Truncates to 256 characters just in case (very generous).
     """
-    truncated = password[:72]  # truncate to 72 characters
+    truncated = password[:256]
     return pwd_context.hash(truncated)
 
 def verify_password(password: str, hashed: str) -> bool:
     """
-    Verify a password against a hashed value, truncate input to 72 bytes.
+    Verify a password against a hashed value.
+    Truncate input for safety.
     """
-    truncated = password[:72]
+    truncated = password[:256]
     return pwd_context.verify(truncated, hashed)
 
 # --- JWT token ---
