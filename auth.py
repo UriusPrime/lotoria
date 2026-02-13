@@ -7,14 +7,16 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import User
 
+# --- Config ---
 SECRET_KEY = "CHANGE_THIS_LATER"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
+# --- Password hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-
+# --- Database ---
 def get_db():
     db = SessionLocal()
     try:
@@ -22,33 +24,52 @@ def get_db():
     finally:
         db.close()
 
+# --- Hash & verify ---
+def hash_password(password: str) -> str:
+    """
+    Hash a password using bcrypt, truncated to 72 bytes (bcrypt limit).
+    """
+    truncated = password[:72]  # truncate to 72 characters
+    return pwd_context.hash(truncated)
 
-def hash_password(password: str):
-    return pwd_context.hash(password)
+def verify_password(password: str, hashed: str) -> bool:
+    """
+    Verify a password against a hashed value, truncate input to 72 bytes.
+    """
+    truncated = password[:72]
+    return pwd_context.verify(truncated, hashed)
 
-
-def verify_password(password: str, hashed: str):
-    return pwd_context.verify(password, hashed)
-
-
-def create_access_token(user_id: int):
+# --- JWT token ---
+def create_access_token(user_id: int) -> str:
+    """
+    Create a JWT access token for a user.
+    """
     expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-
+# --- Current user ---
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
-):
+) -> User:
+    """
+    Decode JWT token and retrieve current user from DB.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload.get("sub"))
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token"
+        )
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
 
     return user
