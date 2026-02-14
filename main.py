@@ -13,7 +13,7 @@ from save_routes import router as save_router
 
 
 # ------------------------------------------------------------------
-# Database
+# Database (CREATE TABLES ON STARTUP)
 # ------------------------------------------------------------------
 Base.metadata.create_all(bind=engine)
 
@@ -25,12 +25,11 @@ app = FastAPI(title="Game Backend")
 
 
 # ------------------------------------------------------------------
-# CORS (REQUIRED FOR UNITY / ANDROID)
-# DEV MODE: allow all
+# CORS (Unity / Android)
 # ------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten later for production
+    allow_origins=["*"],  # tighten later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,7 +37,7 @@ app.add_middleware(
 
 
 # ------------------------------------------------------------------
-# Health check (VERY IMPORTANT for Render & debugging)
+# Health check (Render relies on this)
 # ------------------------------------------------------------------
 @app.get("/health")
 def health():
@@ -58,6 +57,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         username=data.username,
         password_hash=hash_password(data.password)
     )
+
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -69,6 +69,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 @app.post("/auth/login", response_model=TokenResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
+
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
